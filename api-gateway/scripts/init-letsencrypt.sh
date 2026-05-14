@@ -20,39 +20,31 @@ if [[ ! -f ./nginx/ssl/dhparam.pem ]]; then
   openssl dhparam -out ./nginx/ssl/dhparam.pem 2048
 fi
 
-echo "==> Creating dummy certificate for ${GATEWAY_DOMAIN}"
-# Self-signed temp cert so nginx can boot and serve the ACME challenge.
-# We do NOT delete it later — certbot's `--force-renewal` will overwrite
-# the same paths with the real cert, so nginx never sees a missing file.
-${COMPOSE} run --rm --entrypoint "\
-  mkdir -p /etc/letsencrypt/live/${GATEWAY_DOMAIN} && \
-  openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
-    -keyout /etc/letsencrypt/live/${GATEWAY_DOMAIN}/privkey.pem \
-    -out /etc/letsencrypt/live/${GATEWAY_DOMAIN}/fullchain.pem \
-    -subj '/CN=localhost' && \
-  cp /etc/letsencrypt/live/${GATEWAY_DOMAIN}/fullchain.pem /etc/letsencrypt/live/${GATEWAY_DOMAIN}/chain.pem" certbot
+echo "==> Stopping nginx if running (we'll free :80 for the standalone challenge)"
+${COMPOSE} stop api-gateway 2>/dev/null || true
+${COMPOSE} rm -f api-gateway 2>/dev/null || true
 
-echo "==> Starting nginx"
-${COMPOSE} up -d --force-recreate api-gateway
-
-# Give nginx a moment to bind to :80 before certbot tries to hit it.
-sleep 5
-
-echo "==> Requesting real Let's Encrypt certificate (overwrites the dummy)"
+echo "==> Issuing Let's Encrypt certificate via standalone challenge"
+# certbot binds :80 itself, no nginx required. Once we have the cert,
+# we start nginx with the real files already in place.
 STAGING_ARG=""
 [[ "$STAGING" == "1" ]] && STAGING_ARG="--staging"
 
-${COMPOSE} run --rm --entrypoint "\
-  certbot certonly --webroot -w /var/www/certbot \
-    ${STAGING_ARG} \
-    --non-interactive \
-    --email ${TLS_CONTACT_EMAIL} \
-    -d ${GATEWAY_DOMAIN} \
-    --rsa-key-size 2048 \
-    --agree-tos \
-    --force-renewal" certbot
+# Use --entrypoint to a single binary; pass args after the service name.
+# Docker compose v2 execs the entrypoint directly (no shell parsing), so
+# a multi-arg string like "certbot certonly ..." would be interpreted as
+# a single executable path and fail.
+${COMPOSE} run --rm -p 80:80 --entrypoint certbot certbot \
+  certonly --standalone \
+  ${STAGING_ARG} \
+  --non-interactive \
+  --email ${TLS_CONTACT_EMAIL} \
+  -d ${GATEWAY_DOMAIN} \
+  --rsa-key-size 2048 \
+  --agree-tos \
+  --force-renewal
 
-echo "==> Reloading nginx"
-${COMPOSE} exec api-gateway nginx -s reload
+echo "==> Starting nginx with the real cert"
+${COMPOSE} up -d api-gateway certbot
 
 echo "==> Done"
