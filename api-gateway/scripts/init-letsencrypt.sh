@@ -21,6 +21,9 @@ if [[ ! -f ./nginx/ssl/dhparam.pem ]]; then
 fi
 
 echo "==> Creating dummy certificate for ${GATEWAY_DOMAIN}"
+# Self-signed temp cert so nginx can boot and serve the ACME challenge.
+# We do NOT delete it later — certbot's `--force-renewal` will overwrite
+# the same paths with the real cert, so nginx never sees a missing file.
 ${COMPOSE} run --rm --entrypoint "\
   mkdir -p /etc/letsencrypt/live/${GATEWAY_DOMAIN} && \
   openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
@@ -30,21 +33,19 @@ ${COMPOSE} run --rm --entrypoint "\
   cp /etc/letsencrypt/live/${GATEWAY_DOMAIN}/fullchain.pem /etc/letsencrypt/live/${GATEWAY_DOMAIN}/chain.pem" certbot
 
 echo "==> Starting nginx"
-${COMPOSE} up -d api-gateway
+${COMPOSE} up -d --force-recreate api-gateway
 
-echo "==> Deleting dummy certificate"
-${COMPOSE} run --rm --entrypoint "\
-  rm -Rf /etc/letsencrypt/live/${GATEWAY_DOMAIN} && \
-  rm -Rf /etc/letsencrypt/archive/${GATEWAY_DOMAIN} && \
-  rm -Rf /etc/letsencrypt/renewal/${GATEWAY_DOMAIN}.conf" certbot
+# Give nginx a moment to bind to :80 before certbot tries to hit it.
+sleep 5
 
-echo "==> Requesting real Let's Encrypt certificate"
+echo "==> Requesting real Let's Encrypt certificate (overwrites the dummy)"
 STAGING_ARG=""
 [[ "$STAGING" == "1" ]] && STAGING_ARG="--staging"
 
 ${COMPOSE} run --rm --entrypoint "\
   certbot certonly --webroot -w /var/www/certbot \
     ${STAGING_ARG} \
+    --non-interactive \
     --email ${TLS_CONTACT_EMAIL} \
     -d ${GATEWAY_DOMAIN} \
     --rsa-key-size 2048 \
