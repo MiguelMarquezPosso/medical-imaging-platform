@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  medimg-sync:
+    build: .
+    image: medimg/sync-client:latest
+    container_name: medimg-sync
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data/inbox:/var/lib/medimg-sync/inbox
+      - ./data/archive:/var/lib/medimg-sync/archive
+      - ./data/quarantine:/var/lib/medimg-sync/quarantine
+      - sync-state:/var/lib/medimg-sync/state
+    environment:
+      WATCH_DIR: /var/lib/medimg-sync/inbox
+      ARCHIVE_DIR: /var/lib/medimg-sync/archive
+      QUARANTINE_DIR: /var/lib/medimg-sync/quarantine
+      STATE_DB: /var/lib/medimg-sync/state/state.sqlite3
+    network_mode: bridge
+
+volumes:
+  sync-state:

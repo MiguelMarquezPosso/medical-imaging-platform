@@ -1,0 +1,54 @@
+# --- secrets / env -----------------------------------------------------------
+.env
+.env.*
+!.env.example
+*/.env
+*/.env.*
+!*/.env.example
+
+# --- per-developer docker compose overrides ---------------------------------
+docker-compose.override.yml
+*/docker-compose.override.yml
+
+# --- python ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# --- node (in case of frontend dirs) ----------------------------------------
+node_modules/
+
+# --- runtime data -----------------------------------------------------------
+data/
+*.sqlite3
+*.log
+
+# --- TLS / certificates (must not be committed) -----------------------------
+**/nginx/ssl/*.pem
+**/nginx/ssl/*.key
+**/nginx/ssl/dhparam.pem
+*.pem
+*.crt
+*.key
+!**/snippets/*.conf
+
+# --- IDE / OS ---------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- temporary test artifacts -----------------------------------------------
+/tmp/
+*.tmp

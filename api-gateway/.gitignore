@@ -1,0 +1,4 @@
+.env
+nginx/ssl/*.pem
+nginx/ssl/dhparam.pem
+*.log

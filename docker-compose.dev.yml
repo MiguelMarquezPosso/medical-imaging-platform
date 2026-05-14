@@ -1,0 +1,35 @@
+# Convenience compose for local development — brings all three repos up at once.
+# Production deployments should use each repo's own compose file separately so
+# they can be scaled and versioned independently.
+version: "3.9"
+
+services:
+  api-gateway:
+    extends:
+      file: ./api-gateway/docker-compose.yml
+      service: api-gateway
+
+  auth-service:
+    extends:
+      file: ./auth-service/docker-compose.yml
+      service: auth-service
+
+  auth-db:
+    extends:
+      file: ./auth-service/docker-compose.yml
+      service: db
+
+  medical-imaging-service:
+    extends:
+      file: ./medical-imaging-service/docker-compose.yml
+      service: medical-imaging-service
+
+  imaging-db:
+    extends:
+      file: ./medical-imaging-service/docker-compose.yml
+      service: imaging-db
+
+networks:
+  default:
+    name: medimg-internal
+    external: true

@@ -1,0 +1,27 @@
+[Unit]
+Description=Medical Imaging Sync Client (Raspberry Pi)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=medimg
+Group=medimg
+WorkingDirectory=/opt/medimg-sync
+EnvironmentFile=/etc/medimg-sync/medimg-sync.env
+ExecStart=/opt/medimg-sync/.venv/bin/python -m src.main
+Restart=on-failure
+RestartSec=5s
+
+# Hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ReadWritePaths=/var/lib/medimg-sync
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

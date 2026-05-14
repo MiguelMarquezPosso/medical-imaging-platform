@@ -1,0 +1,66 @@
+version: "3.9"
+
+services:
+  medical-imaging-service:
+    build: .
+    image: medimg/medical-imaging-service:latest
+    container_name: medimg-imaging-service
+    restart: unless-stopped
+    env_file: .env
+    expose:
+      - "8000"
+    volumes:
+      - dicom-storage:/data/dicom
+    networks:
+      - internal
+      - imaging-private  # PACS / Orthanc lives on a private network reached via tunnel
+    depends_on:
+      imaging-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  imaging-db:
+    image: postgres:16-alpine
+    container_name: medimg-imaging-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-medimg}
+    volumes:
+      - imaging-db-data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build: .
+    image: medimg/medical-imaging-service:latest
+    container_name: medimg-imaging-migrate
+    env_file: .env
+    networks:
+      - internal
+    depends_on:
+      imaging-db:
+        condition: service_healthy
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+volumes:
+  imaging-db-data:
+  dicom-storage:
+
+networks:
+  internal:
+    external: true
+    name: medimg-internal
+  imaging-private:
+    driver: bridge

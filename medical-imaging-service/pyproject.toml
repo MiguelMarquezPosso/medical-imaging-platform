@@ -1,0 +1,17 @@
+[project]
+name = "medical-imaging-service"
+version = "0.1.0"
+description = "DICOMweb facade — QIDO/WADO/STOW + sync ingestion"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "S", "C4", "RUF"]
+ignore = ["S101"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
