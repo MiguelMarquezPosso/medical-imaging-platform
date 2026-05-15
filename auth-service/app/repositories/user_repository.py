@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -58,6 +58,67 @@ class UserRepository:
         await self.session.execute(
             update(User).where(User.id == user_id).values(last_login_at=when)
         )
+
+    # ----- Admin operations ----------------------------------------------
+    async def list_users(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        email_contains: str | None = None,
+    ) -> tuple[list[User], int]:
+        base = select(User).options(selectinload(User.roles))
+        count_q = select(func.count()).select_from(User)
+        if email_contains:
+            base = base.where(User.email.ilike(f"%{email_contains.lower()}%"))
+            count_q = count_q.where(User.email.ilike(f"%{email_contains.lower()}%"))
+        base = base.order_by(User.created_at.desc()).limit(limit).offset(offset)
+        users = (await self.session.execute(base)).scalars().all()
+        total = (await self.session.execute(count_q)).scalar_one()
+        return list(users), total
+
+    async def list_roles(self) -> list[Role]:
+        result = await self.session.execute(select(Role).order_by(Role.name))
+        return list(result.scalars().all())
+
+    async def set_roles(self, user: User, role_names: list[str]) -> None:
+        """Replace the user's roles with the given set."""
+        result = await self.session.execute(
+            select(Role).where(Role.name.in_(role_names))
+        )
+        roles = list(result.scalars().all())
+        found = {r.name for r in roles}
+        missing = set(role_names) - found
+        if missing:
+            raise ValueError(f"Unknown role(s): {', '.join(sorted(missing))}")
+        user.roles = roles
+        await self.session.flush()
+
+    async def update_fields(
+        self,
+        user: User,
+        *,
+        full_name: str | None = None,
+        is_active: bool | None = None,
+        is_verified: bool | None = None,
+        hashed_password: str | None = None,
+    ) -> None:
+        if full_name is not None:
+            user.full_name = full_name
+        if is_active is not None:
+            user.is_active = is_active
+        if is_verified is not None:
+            user.is_verified = is_verified
+        if hashed_password is not None:
+            user.hashed_password = hashed_password
+        await self.session.flush()
+
+    async def delete(self, user: User) -> None:
+        await self.session.execute(
+            delete(RefreshToken).where(RefreshToken.user_id == user.id)
+        )
+        await self.session.delete(user)
+        await self.session.flush()
 
 
 class RefreshTokenRepository:
