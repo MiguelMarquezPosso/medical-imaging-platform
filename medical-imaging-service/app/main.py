@@ -38,9 +38,11 @@ def create_app() -> FastAPI:
         version=__version__,
         default_response_class=ORJSONResponse,
         lifespan=lifespan,
-        docs_url="/docs" if settings.APP_ENV != "production" else None,
-        redoc_url="/redoc" if settings.APP_ENV != "production" else None,
-        openapi_url="/openapi.json" if settings.APP_ENV != "production" else None,
+        # Mount docs under /api/v1/* so the existing nginx /api/ route
+        # exposes them publicly without extra gateway config.
+        docs_url="/api/v1/docs" if settings.ENABLE_DOCS else None,
+        redoc_url="/api/v1/redoc" if settings.ENABLE_DOCS else None,
+        openapi_url="/api/v1/openapi.json" if settings.ENABLE_DOCS else None,
     )
 
     if settings.cors_origins_list:

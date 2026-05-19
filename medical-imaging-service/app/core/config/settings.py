@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     S3_ACCESS_KEY_ID: str = ""
     S3_SECRET_ACCESS_KEY: str = ""
 
+    # Swagger UI / OpenAPI
+    ENABLE_DOCS: bool = True
+
     @property
     def cors_origins_list(self) -> list[str]:
         if not self.CORS_ALLOWED_ORIGINS:

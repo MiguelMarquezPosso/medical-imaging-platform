@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     ALLOW_PUBLIC_REGISTRATION: bool = False
     DEFAULT_USER_ROLE: str = "viewer"
 
+    # Swagger UI / OpenAPI — set false in prod if you want to hide it
+    ENABLE_DOCS: bool = True
+
     @property
     def cors_origins_list(self) -> list[str]:
         if not self.CORS_ALLOWED_ORIGINS:
