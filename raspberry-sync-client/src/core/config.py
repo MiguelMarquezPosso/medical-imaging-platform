@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     ARCHIVE_DIR: str
     QUARANTINE_DIR: str
     STATE_DB: str
+    # If True, files are moved from WATCH_DIR to ARCHIVE_DIR after successful upload.
+    # If False (default — testing / shared dirs where medimg can't unlink), files stay
+    # in WATCH_DIR; the SQLite unique-sha index dedupes on rescan so they are not
+    # re-uploaded.
+    DELETE_AFTER_UPLOAD: bool = False
 
     RETRY_INTERVAL_SECONDS: int = 30
     CONNECTIVITY_CHECK_INTERVAL: int = 15

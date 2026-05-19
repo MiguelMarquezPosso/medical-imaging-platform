@@ -21,12 +21,24 @@ class _Handler(FileSystemEventHandler):
         self._glob = glob
         self._loop = loop
 
+    def _emit(self, path: str) -> None:
+        if not fnmatch(os.path.basename(path), self._glob):
+            return
+        self._loop.call_soon_threadsafe(self._queue.put_nowait, path)
+
     def on_created(self, event) -> None:  # type: ignore[override]
         if event.is_directory:
             return
-        if not fnmatch(os.path.basename(event.src_path), self._glob):
+        self._emit(event.src_path)
+
+    def on_moved(self, event) -> None:  # type: ignore[override]
+        # Atomic-rename writers (write to .part, then os.replace) land here, not
+        # on_created. Without this, inotify-friendly producers like dicom-server
+        # become invisible to the watcher.
+        if event.is_directory:
             return
-        self._loop.call_soon_threadsafe(self._queue.put_nowait, event.src_path)
+        dest = getattr(event, "dest_path", None) or event.src_path
+        self._emit(dest)
 
 
 class FileWatcher:

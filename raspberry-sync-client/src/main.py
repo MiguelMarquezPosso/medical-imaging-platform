@@ -7,8 +7,8 @@ Flow per file:
         - read the file
         - AES-256-GCM encrypt with AAD = device_id
         - POST to /sync/upload with X-Sync-Device-Id + optional X-Sync-Signature
-        - on 201/204 → move to ARCHIVE_DIR, mark uploaded
-        - on 409 (duplicate) → move to ARCHIVE_DIR, mark uploaded
+        - on 201/204 / 409 (duplicate) → mark uploaded; if DELETE_AFTER_UPLOAD
+          is true, also move to ARCHIVE_DIR
         - on 4xx (non-409) → move to QUARANTINE_DIR, mark quarantined
         - on 5xx / network → mark failed, retry later (exponential backoff)
 """
@@ -73,8 +73,11 @@ class Supervisor:
         except FileNotFoundError:
             return
         sha = sha256_file(path)
-        if self._state.enqueue(path, sha, size):
-            log.info("file_queued", path=path, size=size)
+        if not self._state.enqueue(path, sha, size):
+            # Already known (path PK or sha unique). The retry loop handles
+            # pending/failed entries explicitly; don't re-queue 'uploaded' files.
+            return
+        log.info("file_queued", path=path, size=size)
         try:
             self._queue.put_nowait(path)
         except asyncio.QueueFull:
@@ -102,22 +105,36 @@ class Supervisor:
 
             try:
                 result = await self._uploader.upload(data)
-                self._state.mark_uploaded(path)
-                archived = move_safely(path, self._settings.ARCHIVE_DIR)
-                log.info("upload_ok", path=path, archived=archived, result=result)
             except Exception as exc:  # noqa: BLE001
                 # 4xx -> quarantine; 5xx/network -> retry later
                 status = getattr(getattr(exc, "response", None), "status_code", None)
                 if status and 400 <= status < 500 and status != 409:
                     try:
                         quarantined = move_safely(path, self._settings.QUARANTINE_DIR)
-                    except FileNotFoundError:
+                    except (FileNotFoundError, PermissionError):
                         quarantined = path
                     self._state.mark_quarantined(path, f"{status}: {exc}")
                     log.error("upload_quarantined", path=path, error=str(exc), moved_to=quarantined)
                 else:
                     self._state.mark_failed(path, str(exc))
                     log.warning("upload_failed_will_retry", path=path, error=str(exc))
+                return
+
+            self._state.mark_uploaded(path)
+            if self._settings.DELETE_AFTER_UPLOAD:
+                try:
+                    archived = move_safely(path, self._settings.ARCHIVE_DIR)
+                    log.info("upload_ok", path=path, archived=archived, result=result)
+                except (PermissionError, OSError) as exc:
+                    # Upload already succeeded — do NOT revert state on archive failure.
+                    log.warning(
+                        "upload_ok_archive_failed",
+                        path=path,
+                        error=str(exc),
+                        hint="medimg user lacks write/unlink on WATCH_DIR",
+                    )
+            else:
+                log.info("upload_ok", path=path, kept_in_place=True, result=result)
 
     @staticmethod
     def _read_file(path: str) -> bytes:
